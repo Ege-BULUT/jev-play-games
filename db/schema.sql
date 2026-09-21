@@ -19,6 +19,8 @@ create unique index if not exists sessions_one_live on sessions (game) where sta
 create index if not exists sessions_game_started on sessions (game, started_at desc);
 
 alter table sessions add column if not exists claimed_seq integer not null default 0;
+-- Why a session ended: 'idle' (nobody watched; Play live resumes it) or 'over' (the game finished).
+alter table sessions add column if not exists end_reason text;
 
 create table if not exists decisions (
   session_id uuid not null references sessions (id) on delete cascade,
@@ -61,7 +63,7 @@ exception when duplicate_object then null; end $$;
 -- so the rule needs no cron: a game with no viewers has no leader, makes no Jev calls, and is
 -- closed the next time anyone asks.
 create or replace function end_idle_sessions() returns void language sql as $$
-  update sessions set status = 'ended', ended_at = last_at
+  update sessions set status = 'ended', ended_at = last_at, end_reason = 'idle'
   where status = 'live' and last_at < now() - interval '3 minutes';
 $$;
 

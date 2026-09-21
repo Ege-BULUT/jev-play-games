@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   const state = stateAt(game, b.seed, b.prev);
 
   if (game.over(state)) {
-    await db.from('sessions').update({ status: 'ended', ended_at: new Date().toISOString(), score: game.score(state) })
+    await db.from('sessions').update({ status: 'ended', end_reason: 'over', ended_at: new Date().toISOString(), score: game.score(state) })
       .eq('id', id).eq('status', 'live');
     return Response.json({ over: true });
   }
