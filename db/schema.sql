@@ -125,6 +125,7 @@ declare
   calls integer;
   oldest timestamptz;
   newest timestamptz;
+  active integer;
 begin
   if coalesce((select input_tokens from spend where day = (now() at time zone 'utc')::date), 0) >= p_cap_tokens then
     return jsonb_build_object('error', 'budget');
@@ -134,13 +135,18 @@ begin
   end if;
   perform pg_advisory_xact_lock(7331); -- one rate check at a time across the site
   delete from jev_calls where at < now() - interval '2 minutes';
-  select count(*), min(at), max(at) into calls, oldest, newest from jev_calls where at > now() - interval '60 seconds';
-  -- Spread the calls evenly (one per 60/p_rpm s) so games move at a steady pace instead of
-  -- bursting through the minute's budget and then stalling; the window count is the backstop.
-  if newest is not null and now() - newest < make_interval(secs => 60.0 / p_rpm) then
+  select count(*), min(at) into calls, oldest from jev_calls where at > now() - interval '60 seconds';
+  -- Share the budget fairly: each live game that is being driven gets one call per
+  -- (60 / p_rpm) * active games, so games move at a steady pace instead of bursting through the
+  -- minute and stalling, and a client that asks sooner cannot starve another game. The window
+  -- count below is the backstop.
+  select greatest(1, count(*)) into active from sessions
+  where status = 'live' and (id = p_session or leader_seen > now() - interval '10 seconds');
+  select last_at into newest from sessions where id = p_session;
+  if p_seq > 1 and now() - newest < make_interval(secs => 60.0 * active / p_rpm) then
     perform release_turn(p_session, p_seq);
     return jsonb_build_object('error', 'pace',
-      'retry_ms', greatest(50, ceil(extract(epoch from (newest + make_interval(secs => 60.0 / p_rpm) - now())) * 1000)));
+      'retry_ms', greatest(50, ceil(extract(epoch from (newest + make_interval(secs => 60.0 * active / p_rpm) - now())) * 1000)));
   end if;
   if calls >= p_rpm then
     perform release_turn(p_session, p_seq);
