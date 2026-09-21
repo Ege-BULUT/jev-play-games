@@ -14,7 +14,7 @@ export async function ask(state: string, instruction: string, options: Option[])
       model: 'typesafe-ai/jev',
       state,
       questions: { move: { type: 'choice', instructions: instruction, criteria } },
-      maxRetries: 1,
+      maxRetries: 0, // a retry would sit out the gateway's retry-after (up to 60 s) inside the request
     });
     const probs = r.answers.move.probabilities ?? { [r.answers.move.choice]: 1 };
     const confidence = (r.providerMetadata?.typesafe as { confidence?: Record<string, number> } | undefined)?.confidence?.move ?? null;

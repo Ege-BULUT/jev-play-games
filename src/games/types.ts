@@ -15,6 +15,7 @@ export type Game<S> = {
   accent: string;        // card and bar colour
   instruction: string;   // the question put to Jev every turn
   stepMs: number;        // how long one decision's animation lasts in the viewer
+  realtime?: boolean;    // stretch that animation over the real gap between decisions (slow motion, not a freeze)
   init(seed: number): S;
   isState(value: unknown): value is S; // server-side shape check on client-supplied state
   describe(s: S): string;
