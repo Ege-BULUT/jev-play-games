@@ -24,7 +24,7 @@ describe.each(GAMES.map((g) => [g.id, g] as const))('%s', (_, g) => {
   });
 
   it('rejects malformed state', () => {
-    for (const bad of [null, 1, 'x', {}, { ...g.init(1), rng: 'a' }]) expect(g.isState(bad)).toBe(false);
+    for (const bad of [null, 1, 'x', {}, { ...g.init(1), rng: 'a', seed: 'a' }]) expect(g.isState(bad)).toBe(false);
   });
 });
 
@@ -34,4 +34,20 @@ it('2048 merges each pair once and scores the merged value', () => {
   expect(out.b[0].slice(0, 2)).toEqual([2, 3]);
   expect(out.score).toBe(4 + 8);
   expect(g2048.options(s).map((o) => o.id).sort()).toEqual(['down', 'left', 'right']);
+});
+
+it('hill climb rewards reading the lookahead: a greedy safe policy outlasts flooring it', async () => {
+  const { hillclimb: g } = await import('../src/games/hillclimb');
+  const play = (seed: number, greedy: boolean) => {
+    let s = g.init(seed);
+    for (let n = 0; n < 3000 && !g.over(s); n++) {
+      const opts = g.options(s).map((o) => ({ id: o.id, crash: /crashes/.test(o.detail), m: Number(/moves (-?[\d.]+)/.exec(o.detail)![1]) }));
+      s = g.step(s, greedy ? (opts.filter((o) => !o.crash).sort((a, b) => b.m - a.m)[0] ?? opts[0]).id : 'gas');
+    }
+    return s;
+  };
+  const seeds = [1, 42, 777];
+  expect(seeds.filter((seed) => play(seed, false).crashed).length).toBeGreaterThan(0);
+  const greedy = seeds.map((seed) => play(seed, true));
+  expect(Math.min(...greedy.map(g.score))).toBeGreaterThan(300);
 });
