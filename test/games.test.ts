@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAMES } from '../src/games';
 import { g2048 } from '../src/games/g2048';
+import { jevbros } from '../src/games/jevbros';
 import { next } from '../src/games/rng';
 
 describe.each(GAMES.map((g) => [g.id, g] as const))('%s', (_, g) => {
@@ -50,4 +51,21 @@ it('hill climb rewards reading the lookahead: a greedy safe policy outlasts floo
   expect(seeds.filter((seed) => play(seed, false).crashed).length).toBeGreaterThan(0);
   const greedy = seeds.map((seed) => play(seed, true));
   expect(Math.min(...greedy.map(g.score))).toBeGreaterThan(300);
+});
+
+it('Super Jev Bros: a lookahead policy clears the first 60 tiles of level 1 without losing a life', () => {
+  // Pick the option that gets furthest after holding it for four turns and does not lose a life.
+  type JS = ReturnType<typeof jevbros.init>;
+  const hold = (s: JS, a: string) => { for (let i = 0; i < 4 && !jevbros.over(s); i++) s = jevbros.step(s, a); return s; };
+  let s = jevbros.init(42), turns = 0;
+  while (s.base + s.x < 60 && turns < 200) {
+    const scored = jevbros.options(s).map((o) => {
+      const e = hold(s, o.id);
+      return { id: o.id, v: e.lives < s.lives ? -1e9 : e.base + e.x };
+    });
+    s = jevbros.step(s, scored.reduce((b, o) => (o.v > b.v ? o : b)).id);
+    turns++;
+  }
+  expect(s.lv > 1 || s.x >= 60).toBe(true);
+  expect(s.lives).toBe(3);
 });
