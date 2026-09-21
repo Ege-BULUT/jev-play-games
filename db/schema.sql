@@ -21,6 +21,9 @@ create index if not exists sessions_game_started on sessions (game, started_at d
 alter table sessions add column if not exists claimed_seq integer not null default 0;
 -- Why a session ended: 'idle' (nobody watched; Play live resumes it) or 'over' (the game finished).
 alter table sessions add column if not exists end_reason text;
+-- A session started from turn forked_seq of another one ("continue from here").
+alter table sessions add column if not exists forked_from uuid references sessions (id) on delete set null;
+alter table sessions add column if not exists forked_seq integer;
 
 create table if not exists decisions (
   session_id uuid not null references sessions (id) on delete cascade,
@@ -172,6 +175,25 @@ begin
   return true;
 end $$;
 
+-- Starts a live session that carries on from turn p_seq of p_src: same game and seed, with the
+-- source's decisions up to p_seq copied, so the server derives turn p_seq + 1 from them like any
+-- other turn and the source recording stays untouched. Fails on the one-live-per-game index if
+-- the game is already live.
+create or replace function fork_session(p_src uuid, p_seq integer) returns sessions language plpgsql as $$
+declare
+  src sessions;
+  s sessions;
+begin
+  select * into src from sessions where id = p_src;
+  if not found or p_seq < 1 or p_seq > src.last_seq then return null; end if;
+  insert into sessions (game, seed, forked_from, forked_seq) values (src.game, src.seed, src.id, p_seq) returning * into s;
+  insert into decisions (session_id, seq, state, action, probs, labels, confidence, latency_ms, tokens, at)
+  select s.id, seq, state, action, probs, labels, confidence, latency_ms, tokens, at
+  from decisions where session_id = p_src and seq <= p_seq;
+  update sessions set claimed_seq = p_seq, last_at = now() where id = s.id returning * into s;
+  return s;
+end $$;
+
 -- New functions are executable by PUBLIC, which anon inherits, so revoke from PUBLIC as well.
 revoke execute on function claim_turn(uuid, text, integer, integer) from public, anon, authenticated;
 revoke execute on function add_spend(integer) from public, anon, authenticated;
@@ -179,4 +201,5 @@ revoke execute on function end_idle_sessions() from public, anon, authenticated;
 revoke execute on function advance_session() from public, anon, authenticated;
 revoke execute on function begin_turn(uuid, text, integer, integer, bigint, integer) from public, anon, authenticated;
 revoke execute on function release_turn(uuid, integer) from public, anon, authenticated;
+revoke execute on function fork_session(uuid, integer) from public, anon, authenticated;
 revoke execute on function finish_turn(jsonb, integer) from public, anon, authenticated;

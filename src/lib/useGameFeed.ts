@@ -13,8 +13,12 @@ export type Feed = {
   error: string | null;
   over: boolean;
   pacing: boolean;           // waiting out the model's rate limit
-  playLive: () => Promise<void>;
+  replay: Replay | null;     // controls while a recording plays
+  playLive: (start?: Start) => Promise<void>;
 };
+export type Replay = { count: number; index: number; paused: boolean; seek: (i: number) => void; toggle: () => void };
+// No start: resume a paused game or start one. 'new': a new game. 'fork': carry on from a recorded turn.
+export type Start = { mode: 'new' } | { mode: 'fork'; from: string; seq: number };
 
 const LEASE_MS = 6500; // a little over the server's 6 s lease, so followers do not steal a live leader's turn
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -42,6 +46,9 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const [pacing, setPacing] = useState(false);
+  const [rec, setRec] = useState<Decision[]>([]);
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
   const me = useRef<string>('');
   const leading = useRef(false);
   const lastSeq = useRef(0);
@@ -55,12 +62,13 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
     setHistory((h) => [d, ...h.filter((x) => x.seq !== d.seq)].slice(0, 24));
   };
 
-  async function playLive() {
+  async function playLive(start?: Start) {
     setError(null);
-    const r = await fetch('/api/session', { method: 'POST', body: JSON.stringify({ game: gameId }) });
+    const r = await fetch('/api/session', { method: 'POST', body: JSON.stringify({ game: gameId, ...start }) });
     const j = await r.json();
     if (!r.ok) { setError(j.error === 'budget' ? "Today's Jev budget is spent. Replays keep playing; live is back tomorrow (UTC)." : j.error); return; }
-    leading.current = true;
+    leading.current = !j.joined; // joining someone else's live game means following it
+    if (replayId) window.history.replaceState(null, '', `/play/${gameId}`); // no longer that recording
     enterLive(j.session);
   }
 
@@ -92,24 +100,26 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
     return () => { cancelled = true; };
   }, [gameId, replayId]);
 
-  // Replay: loop the recording at the pace it was played, clamped so it never crawls.
+  // Replay: loop the recording at the pace it was played, clamped so it never crawls. It can be
+  // paused and scrubbed, so a viewer can pick the turn to continue from.
+  const goto = (ds: Decision[], i: number) => { setIdx(i); if (ds[i]) setShown({ d: ds[i], at: performance.now() }); };
   useEffect(() => {
     if (mode !== 'replay' || !session) return;
     let stop = false;
-    (async () => {
-      const ds = await allDecisions(session.id);
-      while (!stop && ds.length) {
-        setHistory([]);
-        for (let i = 0; i < ds.length && !stop; i++) {
-          setShown({ d: ds[i], at: performance.now() });
-          setHistory((h) => [ds[i], ...h].slice(0, 24));
-          const gap = i + 1 < ds.length ? Date.parse(ds[i + 1].at) - Date.parse(ds[i].at) : 2500;
-          await sleep(Math.min(1500, Math.max(stepMs + 60, gap)));
-        }
-      }
-    })();
+    allDecisions(session.id).then((ds) => { if (!stop) { setRec(ds); setPaused(false); goto(ds, 0); } });
     return () => { stop = true; };
-  }, [mode, session, stepMs]);
+  }, [mode, session]);
+  useEffect(() => {
+    if (mode !== 'replay' || paused || !rec.length) return;
+    const gap = idx + 1 < rec.length ? Date.parse(rec[idx + 1].at) - Date.parse(rec[idx].at) : 2500;
+    const t = setTimeout(() => goto(rec, (idx + 1) % rec.length), Math.min(1500, Math.max(stepMs + 60, gap)));
+    return () => clearTimeout(t);
+  }, [mode, paused, rec, idx, stepMs]);
+  const replay: Replay | null = mode === 'replay' && rec.length ? {
+    count: rec.length, index: idx, paused,
+    seek: (i) => { setPaused(true); goto(rec, Math.max(0, Math.min(rec.length - 1, i))); },
+    toggle: () => setPaused((p) => !p),
+  } : null;
 
   // Live: follow the session through realtime, and drive it whenever this tab holds the lease
   // or the previous leader has gone quiet. A hidden tab never drives, so an unwatched game makes
@@ -173,5 +183,6 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
     return () => clearTimeout(t);
   }, [over, mode]); // eslint-disable-line react-hooks/exhaustive-deps -- playLive reads only refs and props
 
-  return { mode, session, decision: shown.d, shownAt: shown.at, history, watchers, error, over, pacing, playLive };
+    const shownHistory = mode === 'replay' ? rec.slice(Math.max(0, idx - 23), idx + 1).reverse() : history;
+  return { mode, session, decision: shown.d, shownAt: shown.at, history: shownHistory, watchers, error, over, pacing, replay, playLive };
 }
