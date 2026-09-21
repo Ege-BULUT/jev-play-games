@@ -13,6 +13,9 @@ export function PlayView({ gameId, replayId }: { gameId: string; replayId?: stri
   const feed = useGameFeed(gameId, game.stepMs, replayId);
   const [starting, setStarting] = useState(false);
   const showOverlay = feed.mode === 'replay' || feed.mode === 'empty';
+  // Real-time games play their frames across the actual time to the next decision.
+  const gaps = feed.history.slice(0, 6).map((d, i, h) => (i + 1 < h.length ? Date.parse(d.at) - Date.parse(h[i + 1].at) : NaN)).filter((g) => g > 0);
+  const pace = game.realtime && gaps.length ? Math.min(4000, Math.max(game.stepMs, gaps.reduce((a, b) => a + b, 0) / gaps.length)) : undefined;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 md:px-8">
@@ -27,7 +30,7 @@ export function PlayView({ gameId, replayId }: { gameId: string; replayId?: stri
 
       <div className="flex flex-col gap-6 md:flex-row">
         <section className="relative aspect-square w-full overflow-hidden rounded-2xl border border-white/10 bg-black md:aspect-auto md:h-[min(72vh,760px)] md:w-[60%]">
-          <GameCanvas game={game} decision={feed.decision} shownAt={feed.shownAt} seed={feed.session?.seed} className="h-full w-full" />
+          <GameCanvas game={game} decision={feed.decision} shownAt={feed.shownAt} seed={feed.session?.seed} durationMs={pace} className="h-full w-full" />
           {feed.over && feed.mode === 'live' && (
             <div className="absolute inset-x-0 top-6 mx-auto w-fit rounded-full bg-black/70 px-4 py-2 text-sm font-semibold">Game over · next game starts shortly</div>
           )}
@@ -47,6 +50,9 @@ export function PlayView({ gameId, replayId }: { gameId: string; replayId?: stri
                   : 'No recordings yet. Press play and Jev starts the first game, live for everyone on this page.'}
               </p>
             </div>
+          )}
+          {feed.pacing && !feed.error && (
+            <div className="absolute right-4 top-4 rounded-full bg-black/70 px-3 py-1 text-xs text-zinc-300">Jev is pacing itself (model rate limit)…</div>
           )}
           {feed.error && <div className="absolute inset-x-4 bottom-4 rounded-lg bg-red-950/90 px-4 py-2 text-sm text-red-200">{feed.error}</div>}
         </section>

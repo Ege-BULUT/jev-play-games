@@ -1,3 +1,4 @@
+import { GatewayRateLimitError } from '@ai-sdk/gateway';
 import { gameById } from '@/games';
 import type { Option } from '@/games/types';
 import { ask } from '@/lib/jev';
@@ -5,8 +6,9 @@ import { adminDb, capTokens, stateAt } from '@/lib/server';
 import type { Decision } from '@/lib/db';
 
 const MIN_GAP_MS = 150; // per game, so a runaway client cannot spin Jev faster than the animation
+const RPM = Number(process.env.JEV_RPM ?? 28); // the gateway's limit is 30 a minute for the project
 
-type Begin = { error?: string; game: string; seed: number; prev: Pick<Decision, 'state' | 'action'> | null };
+type Begin = { error?: string; retry_ms?: number; game: string; seed: number; prev: Pick<Decision, 'state' | 'action'> | null };
 
 // Decides turn `seq` of a live session. Whoever wins the claim in begin_turn is the leader for
 // that turn; everyone else watches the decision arrive through realtime. Two database round trips
@@ -21,10 +23,11 @@ export async function POST(req: Request) {
   const n = seq as number;
   const db = adminDb();
 
-  const begin = await db.rpc('begin_turn', { p_session: id, p_leader: leader, p_seq: n, p_min_gap_ms: MIN_GAP_MS, p_cap_tokens: capTokens() });
+  const begin = await db.rpc('begin_turn', { p_session: id, p_leader: leader, p_seq: n, p_min_gap_ms: MIN_GAP_MS, p_cap_tokens: capTokens(), p_rpm: RPM });
   if (begin.error) return Response.json({ error: begin.error.message }, { status: 500 });
   const b = begin.data as Begin;
   if (b.error === 'budget') return Response.json({ error: 'budget' }, { status: 429 });
+  if (b.error === 'rate' || b.error === 'pace') return Response.json({ error: b.error, retryMs: b.retry_ms }, { status: 503 });
   if (b.error) return Response.json({ error: b.error }, { status: 409 });
   const game = gameById(b.game);
   if (!game) return Response.json({ error: 'unknown game' }, { status: 400 });
@@ -42,7 +45,12 @@ export async function POST(req: Request) {
   try {
     pick = await ask(game.describe(state), game.instruction, options);
   } catch (e) {
-    return Response.json({ error: `jev: ${(e as Error).message}` }, { status: 503 });
+    await db.rpc('release_turn', { p_session: id, p_seq: n }); // let the leader retry this turn
+    if (GatewayRateLimitError.isInstance(e)) {
+      const after = Number((e.cause as { responseHeaders?: Record<string, string> } | undefined)?.responseHeaders?.['retry-after']);
+      return Response.json({ error: 'rate', retryMs: (Number.isFinite(after) && after > 0 ? after : 5) * 1000 }, { status: 503 });
+    }
+    return Response.json({ error: `jev: ${(e as Error).message}`, retryMs: 2000 }, { status: 503 });
   }
   const decision = {
     session_id: id, seq: n, state, action: pick.action, probs: pick.probs,

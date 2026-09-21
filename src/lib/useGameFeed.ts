@@ -12,6 +12,7 @@ export type Feed = {
   watchers: number;
   error: string | null;
   over: boolean;
+  pacing: boolean;           // waiting out the model's rate limit
   playLive: () => Promise<void>;
 };
 
@@ -40,6 +41,7 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
   const [watchers, setWatchers] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
+  const [pacing, setPacing] = useState(false);
   const me = useRef<string>('');
   const leading = useRef(false);
   const lastSeq = useRef(0);
@@ -134,7 +136,7 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
         const r = await fetch('/api/decide', { method: 'POST', body: JSON.stringify({ session: session.id, leader: me.current, seq: lastSeq.current + 1 }) });
         const j = await r.json().catch(() => ({}));
         if (stop) break;
-        if (r.ok && j.decision) { leading.current = true; setError(null); show(j.decision); }
+        if (r.ok && j.decision) { leading.current = true; setError(null); setPacing(false); show(j.decision); }
         else if (r.ok && j.over) { setOver(true); break; }
         else if (r.status === 409) {
           // Someone else holds the turn, or this tab missed a realtime insert: catch up from the table.
@@ -146,6 +148,13 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
           const { data: row } = await client().from('sessions').select('*').eq('id', session.id).single();
           if (row && !isLive(row as Session)) { setSession(row as Session); setMode('replay'); break; } // idle too long: over
           await sleep(800);
+          continue;
+        }
+        else if (r.status === 503 && j.retryMs) {
+          // Rate limited: the server gave the turn back, so this tab keeps it and simply waits.
+          setPacing(j.error === 'rate');
+          lastSeen.current = Date.now() + j.retryMs; // followers must not read the wait as a dead leader
+          await sleep(j.retryMs);
           continue;
         }
         else if (r.status === 429) { setError("Today's Jev budget is spent. Live is back tomorrow (UTC)."); break; }
@@ -163,5 +172,5 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
     return () => clearTimeout(t);
   }, [over, mode]); // eslint-disable-line react-hooks/exhaustive-deps -- playLive reads only refs and props
 
-  return { mode, session, decision: shown.d, shownAt: shown.at, history, watchers, error, over, playLive };
+  return { mode, session, decision: shown.d, shownAt: shown.at, history, watchers, error, over, pacing, playLive };
 }

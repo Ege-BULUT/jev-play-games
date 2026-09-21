@@ -76,6 +76,7 @@ export const hillclimb: Game<S> = {
   accent: '#f97316',
   instruction: 'Which input drives the car furthest over the hills without flipping over or running out of fuel?',
   stepMs: (FRAMES * 1000) / 60,
+  realtime: true,
   init(seed) {
     const s0 = seed | 0;
     const base: S = { seed: s0, x: 2, y: ground(s0, 2) + 1.2, a: Math.atan(slope(s0, 2)), vx: 0, vy: 0, va: 0, fuel: 1, best: 2, cans: 0, t: 0, crashed: false, poses: [] };
