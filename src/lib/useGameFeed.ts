@@ -143,6 +143,8 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
           const { data } = await client().from('decisions').select('*').eq('session_id', session.id)
             .gt('seq', lastSeq.current).order('seq');
           (data as Decision[] | null)?.forEach(show);
+          const { data: row } = await client().from('sessions').select('*').eq('id', session.id).single();
+          if (row && !isLive(row as Session)) { setSession(row as Session); setMode('replay'); break; } // idle too long: over
           await sleep(800);
           continue;
         }
