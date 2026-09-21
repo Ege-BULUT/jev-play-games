@@ -74,7 +74,7 @@ export function PlayView({ gameId, replayId }: { gameId: string; replayId?: stri
                 title={endsGame ? 'The game ends on this turn' : undefined}
                 className={`rounded-full px-5 py-2 text-sm font-bold disabled:opacity-40 ${paused ? 'border border-white/20 text-white hover:bg-white/10' : 'text-black'}`}
                 style={paused ? undefined : { background: game.accent }}>
-                ⤷ Continue live from turn {feed.decision.seq}
+                ⤷ {feed.decision.seq === feed.session.last_seq ? `Continue this game live from turn ${feed.decision.seq}` : `Branch off live from turn ${feed.decision.seq}`}
               </button>
               <button disabled={starting} onClick={() => start({ mode: 'new' })} className="rounded-full border border-white/20 px-5 py-2 text-sm font-bold hover:bg-white/10 disabled:opacity-60">
                 ✦ New game

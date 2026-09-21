@@ -5,7 +5,8 @@ import { adminDb, budgetLeft } from '@/lib/server';
 type Body = { game?: unknown; mode?: unknown; from?: unknown; seq?: unknown };
 
 // "Play live". The game's live session always wins, since only one can run per game. Otherwise:
-// - mode 'fork': a new session that carries on from turn `seq` of recording `from`;
+// - mode 'fork': carry on from turn `seq` of recording `from`: in the same recording from its last
+//   turn, otherwise in a new one that branches off, so no recorded move is overwritten;
 // - mode 'new': a new game;
 // - no mode: resume a game that stopped for lack of viewers, else a new game.
 export async function POST(req: Request) {
@@ -25,8 +26,19 @@ export async function POST(req: Request) {
   if ((await budgetLeft(db)) <= 0) return Response.json({ error: 'budget' }, { status: 429 });
 
   if (mode === 'fork') {
-    const src = await db.from('sessions').select('game').eq('id', from as string).maybeSingle();
+    const src = await db.from('sessions').select('game, last_seq').eq('id', from as string).maybeSingle();
     if (src.data?.game !== g.id) return Response.json({ error: 'bad fork' }, { status: 400 });
+    if (seq === src.data.last_seq) {
+      // From the recording's last turn: keep writing to the same recording, so its new moves
+      // follow on from the old ones. Only a game that has not ended can go on.
+      const last = await db.from('decisions').select('state, action').eq('session_id', from as string).eq('seq', seq).single();
+      if (!last.data || g.over(g.step(last.data.state, last.data.action))) return Response.json({ error: 'game over' }, { status: 400 });
+      const reopened = await db.from('sessions')
+        .update({ status: 'live', end_reason: null, ended_at: null, last_at: new Date().toISOString(), leader: null, claimed_seq: seq })
+        .eq('id', from as string).eq('status', 'ended').eq('last_seq', seq).select().maybeSingle();
+      if (reopened.data) return Response.json({ session: reopened.data });
+    }
+    // From an earlier turn: a new recording branches off, so the moves after it are kept.
     const forked = await db.rpc('fork_session', { p_src: from, p_seq: seq });
     if (forked.data?.id) {
       const last = await db.from('decisions').select('state, action').eq('session_id', forked.data.id).eq('seq', seq as number).single();
