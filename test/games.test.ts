@@ -69,3 +69,31 @@ it('Super Jev Bros: a lookahead policy clears the first 60 tiles of level 1 with
   expect(s.lv > 1 || s.x >= 60).toBe(true);
   expect(s.lives).toBe(3);
 });
+
+it('freedoom rewards reading the lookahead: kills first, then no damage, then progress clears level 1', async () => {
+  const { freedoom: g } = await import('../src/games/freedoom');
+  const num = (re: RegExp, d: string) => Number(re.exec(d)?.[1] ?? 0);
+  const rank = (d: string) => [
+    +/level complete/.test(d), -/you die/.test(d), num(/kills (\d+)/, d), -/take damage/.test(d),
+    (/m closer/.test(d) ? 1 : -1) * num(/([\d.]+) m (?:closer|further)/, d) - num(/(\d+)° off/, d) / 90,
+  ];
+  const better = (a: number[], b: number[]) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+  const cleared = [1, 42, 777].filter((seed) => {
+    let s = g.init(seed);
+    for (let n = 0; n < 1000 && !g.over(s) && s.levels < 1; n++) {
+      const best = g.options(s).reduce((a, o) => (better(rank(o.detail), rank(a.detail)) ? o : a));
+      s = g.step(s, best.id);
+    }
+    return s.levels >= 1;
+  });
+  expect(cleared.length).toBeGreaterThanOrEqual(2);
+});
+
+it('freedoom options stay fast enough to run every turn', async () => {
+  const { freedoom: g } = await import('../src/games/freedoom');
+  let s = g.init(9);
+  for (let n = 0; n < 40; n++) s = g.step(s, 'fwd');
+  const t0 = performance.now();
+  for (let i = 0; i < 20; i++) g.options(s);
+  expect((performance.now() - t0) / 20).toBeLessThan(50);
+});
