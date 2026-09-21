@@ -7,6 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://jev-play-games.vercel.app"), // absolute URLs for the share card
   title: "Jev Play Games",
   description: "Watch TypeSafe's Jev model play games live, with the odds of every move on screen.",
 };
