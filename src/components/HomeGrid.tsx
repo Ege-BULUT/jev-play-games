@@ -9,10 +9,6 @@ import { LiveBadge } from './LiveBadge';
 type Card = { session: Session | null; decision: Decision | null; at: number };
 const ACTIVE_MS = 20_000; // "live" on a card means Jev moved recently, not just that a session is open
 
-const SOON = [
-  { title: 'Freedoom', blurb: 'Classic FPS on free assets.', accent: '#84cc16' },
-];
-
 export function HomeGrid() {
   const [cards, setCards] = useState<Record<string, Card>>({});
   const [now, setNow] = useState(0);
@@ -71,16 +67,6 @@ export function HomeGrid() {
           </Link>
         );
       })}
-      {SOON.map((g) => (
-        <div key={g.title} className="overflow-hidden rounded-2xl border border-dashed border-white/10 bg-zinc-950/50">
-          <div className="flex aspect-[4/3] items-center justify-center text-sm font-semibold uppercase tracking-[0.3em] text-zinc-600">Coming soon</div>
-          <div className="p-4">
-            <h2 className="text-lg font-bold text-zinc-400">{g.title}</h2>
-            <p className="text-sm text-zinc-500">{g.blurb}</p>
-          </div>
-          <div className="h-1 opacity-40" style={{ background: g.accent }} />
-        </div>
-      ))}
     </div>
   );
 }

@@ -37,7 +37,7 @@ given. Every move here is one Jev call, and the page shows the odds of each move
 | Block Blitz (block-drop puzzle) | playable |
 | Hill Climb | playable |
 | Super Jev Bros (platformer, Kenney CC0 art) | playable |
-| Freedoom (FPS on the BSD-licensed Freedoom assets) | planned |
+| Freedoom (raycaster FPS on the BSD-licensed Freedoom art) | playable |
 
 All games are original implementations or open clones with original or freely licensed art. No
 commercial game assets or ROMs are used.
