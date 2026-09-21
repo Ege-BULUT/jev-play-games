@@ -136,7 +136,16 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
         if (stop) break;
         if (r.ok && j.decision) { leading.current = true; setError(null); show(j.decision); }
         else if (r.ok && j.over) { setOver(true); break; }
-        else if (r.status === 409) { leading.current = false; lastSeen.current = Date.now(); await sleep(800); continue; }
+        else if (r.status === 409) {
+          // Someone else holds the turn, or this tab missed a realtime insert: catch up from the table.
+          leading.current = false;
+          lastSeen.current = Date.now();
+          const { data } = await client().from('decisions').select('*').eq('session_id', session.id)
+            .gt('seq', lastSeq.current).order('seq');
+          (data as Decision[] | null)?.forEach(show);
+          await sleep(800);
+          continue;
+        }
         else if (r.status === 429) { setError("Today's Jev budget is spent. Live is back tomorrow (UTC)."); break; }
         else { setError(j.error ?? `HTTP ${r.status}`); await sleep(2000); continue; }
         await sleep(Math.max(0, stepMs - (Date.now() - t0)));

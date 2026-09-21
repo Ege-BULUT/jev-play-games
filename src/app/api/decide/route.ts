@@ -44,6 +44,7 @@ export async function POST(req: Request) {
   } catch (e) {
     return Response.json({ error: `jev: ${(e as Error).message}` }, { status: 503 });
   }
+  if (pick.tokens) await db.rpc('add_spend', { p_tokens: pick.tokens }); // counted even if the insert below loses
   const decision = {
     session_id: id, seq: n, state, action: pick.action, probs: pick.probs,
     labels: Object.fromEntries(options.map((o) => [o.id, o.label])),
@@ -51,9 +52,7 @@ export async function POST(req: Request) {
   };
   const ins = await db.from('decisions').insert(decision);
   if (ins.error) return Response.json({ error: 'turn taken' }, { status: 409 }); // another leader got here first
-  await Promise.all([
-    db.from('sessions').update({ last_seq: n, last_at: new Date().toISOString(), score: game.score(game.step(state, pick.action)) }).eq('id', id),
-    pick.tokens ? db.rpc('add_spend', { p_tokens: pick.tokens }) : null,
-  ]);
+  // last_seq and last_at move with the insert (trigger advance_session); the score is display only.
+  await db.from('sessions').update({ score: game.score(game.step(state, pick.action)) }).eq('id', id);
   return Response.json({ decision });
 }
