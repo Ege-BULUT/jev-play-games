@@ -9,6 +9,8 @@ export const adminDb = () =>
 export const JEV_USD_PER_TOKEN = 0.042 / 1_000_000;
 export const DAILY_CAP_USD = Number(process.env.JEV_DAILY_CAP_USD ?? 1);
 
+export const capTokens = () => Math.floor(DAILY_CAP_USD / JEV_USD_PER_TOKEN);
+
 export async function budgetLeft(db = adminDb()) {
   const day = new Date().toISOString().slice(0, 10);
   const { data } = await db.from('spend').select('input_tokens').eq('day', day).maybeSingle();

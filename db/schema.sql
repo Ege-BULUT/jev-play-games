@@ -96,8 +96,51 @@ create or replace function add_spend(p_tokens integer) returns bigint language s
   returning input_tokens;
 $$;
 
+-- One round trip to start a turn: budget check, claim, and what the server needs to rebuild the
+-- state. Returns {error} or {game, seed, prev: {state, action} | null}.
+create or replace function begin_turn(p_session uuid, p_leader text, p_seq integer, p_min_gap_ms integer, p_cap_tokens bigint)
+returns jsonb language plpgsql as $$
+declare
+  s sessions;
+  p decisions;
+begin
+  if coalesce((select input_tokens from spend where day = (now() at time zone 'utc')::date), 0) >= p_cap_tokens then
+    return jsonb_build_object('error', 'budget');
+  end if;
+  if not claim_turn(p_session, p_leader, p_seq, p_min_gap_ms) then
+    return jsonb_build_object('error', 'not your turn');
+  end if;
+  select * into s from sessions where id = p_session;
+  if p_seq > 1 then
+    select * into p from decisions where session_id = p_session and seq = p_seq - 1;
+    if not found then return jsonb_build_object('error', 'missing turn'); end if;
+  end if;
+  return jsonb_build_object('game', s.game, 'seed', s.seed,
+    'prev', case when p_seq > 1 then jsonb_build_object('state', p.state, 'action', p.action) end);
+end $$;
+
+-- One round trip to finish it: count the spend (even if the insert loses), store the decision
+-- (the trigger advances the session) and set the display score. False if the turn was taken.
+create or replace function finish_turn(p_decision jsonb, p_score integer)
+returns boolean language plpgsql as $$
+declare
+  n integer;
+begin
+  if (p_decision->>'tokens')::integer > 0 then perform add_spend((p_decision->>'tokens')::integer); end if;
+  insert into decisions (session_id, seq, state, action, probs, labels, confidence, latency_ms, tokens)
+  select session_id, seq, state, action, probs, labels, confidence, latency_ms, tokens
+  from jsonb_populate_record(null::decisions, p_decision)
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  if n = 0 then return false; end if;
+  update sessions set score = p_score where id = (p_decision->>'session_id')::uuid;
+  return true;
+end $$;
+
 -- New functions are executable by PUBLIC, which anon inherits, so revoke from PUBLIC as well.
 revoke execute on function claim_turn(uuid, text, integer, integer) from public, anon, authenticated;
 revoke execute on function add_spend(integer) from public, anon, authenticated;
 revoke execute on function end_idle_sessions() from public, anon, authenticated;
 revoke execute on function advance_session() from public, anon, authenticated;
+revoke execute on function begin_turn(uuid, text, integer, integer, bigint) from public, anon, authenticated;
+revoke execute on function finish_turn(jsonb, integer) from public, anon, authenticated;
