@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 export type Session = {
   id: string; game: string; seed: number; status: 'live' | 'ended';
   last_seq: number; last_at: string; started_at: string; ended_at: string | null; score: number;
+  end_reason: 'idle' | 'over' | null;
 };
 export type Decision = {
   session_id: string; seq: number; state: unknown; action: string;

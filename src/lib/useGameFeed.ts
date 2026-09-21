@@ -85,7 +85,8 @@ export function useGameFeed(gameId: string, stepMs: number, replayId?: string): 
       const rows = (data ?? []) as Session[];
       const live = !replayId && rows.find(isLive);
       if (live) { enterLive(live); return; }
-      const rec = rows.find((s) => s.last_seq > 0 && (replayId || s.status === 'ended'));
+      // Not live: a finished game, or a 'live' row nobody has driven for 3 minutes (paused, resumable).
+      const rec = rows.find((s) => s.last_seq > 0);
       if (rec) { setSession(rec); setMode('replay'); } else setMode('empty');
     })();
     return () => { cancelled = true; };

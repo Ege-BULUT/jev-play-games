@@ -45,7 +45,9 @@ export function PlayView({ gameId, replayId }: { gameId: string; replayId?: stri
                 {starting ? 'Waking Jev…' : '▶ Play live'}
               </button>
               <p className="max-w-xs text-center text-sm text-zinc-300">
-                {feed.mode === 'replay'
+                {feed.mode === 'replay' && !replayId && (feed.session?.end_reason === 'idle' || feed.session?.status === 'live')
+                  ? 'Jev paused this game when nobody was watching. Press play and it carries on from where it stopped, live for everyone on this page.'
+                  : feed.mode === 'replay'
                   ? `Behind this: a recorded game${feed.session ? ` from ${new Date(feed.session.started_at).toLocaleString()}` : ''}. Press play and Jev starts a new one, live for everyone on this page.`
                   : 'No recordings yet. Press play and Jev starts the first game, live for everyone on this page.'}
               </p>
