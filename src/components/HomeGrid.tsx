@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { GAMES } from '@/games';
-import { browserDb, isLive, type Decision, type Session } from '@/lib/db';
+import { browserDb, isLive, liveAt, type Decision, type Session } from '@/lib/db';
 import { GameCanvas } from './GameCanvas';
 import { LiveBadge } from './LiveBadge';
 
@@ -50,7 +50,7 @@ export function HomeGrid() {
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {GAMES.map((g) => {
         const c = cards[g.id];
-        const active = !!c?.session && isLive(c.session, now) && now - Date.parse(c.session.last_at) < ACTIVE_MS;
+        const active = !!c?.session && liveAt(c.session, now) && now - Date.parse(c.session.last_at) < ACTIVE_MS;
         return (
           <Link key={g.id} href={`/play/${g.id}`} className="group overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 transition hover:-translate-y-1 hover:border-white/30">
             <div className="relative aspect-[4/3] bg-black">

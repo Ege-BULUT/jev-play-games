@@ -17,5 +17,7 @@ export const browserDb = () =>
 // A session is only live while someone drives it; past 3 idle minutes it counts as ended even
 // before the server gets round to marking it.
 export const IDLE_MS = 3 * 60_000;
-export const isLive = (s: Pick<Session, 'status' | 'last_at'>, now = Date.now()) =>
+export const liveAt = (s: Pick<Session, 'status' | 'last_at'>, now: number) =>
   s.status === 'live' && now - Date.parse(s.last_at) < IDLE_MS;
+// One parameter on purpose: it is passed straight to Array#find, which supplies an index second.
+export const isLive = (s: Pick<Session, 'status' | 'last_at'>) => liveAt(s, Date.now());
