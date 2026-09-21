@@ -1,0 +1,10 @@
+Super Jev Bros art
+
+tiles.png, characters.png and backgrounds.png are the packed tilesheets from
+"Pixel Platformer" (version 1.2) by Kenney (www.kenney.nl):
+https://kenney.nl/assets/pixel-platformer
+
+License: Creative Commons Zero (CC0 1.0 Universal)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+The files are unmodified apart from being renamed.

@@ -20,6 +20,11 @@ given. Every move here is one Jev call, and the page shows the odds of each move
   the session closes after 3 idle minutes.
 - **Everything is recorded.** Each decision is stored with the state it was made from, so a replay
   is exact. The last recording loops behind the *Play live* button.
+- **Rate limit.** Through AI Gateway, Jev allows 30 requests a minute per project. The server spaces
+  calls evenly at `JEV_RPM` (default 28) a minute across all games. The time per move therefore grows
+  with the number of live games, and real-time games play their frames in slow motion across the gap.
+- **Pause and resume.** A game that stops because nobody is watching carries on from its last turn
+  the next time someone presses *Play live*. A finished game starts a new one.
 - **Spend cap.** Input tokens are metered per UTC day. Past `JEV_DAILY_CAP_USD` (default `$1`),
   live play stops until the next day and replays keep running.
 
@@ -30,8 +35,8 @@ given. Every move here is one Jev call, and the page shows the odds of each move
 | 2048 | playable |
 | Snake | playable |
 | Block Blitz (block-drop puzzle) | playable |
-| Hill Climb | planned |
-| Super Jev Bros (platformer, CC0 art) | planned |
+| Hill Climb | playable |
+| Super Jev Bros (platformer, Kenney CC0 art) | playable |
 | Freedoom (FPS on the BSD-licensed Freedoom assets) | planned |
 
 All games are original implementations or open clones with original or freely licensed art. No

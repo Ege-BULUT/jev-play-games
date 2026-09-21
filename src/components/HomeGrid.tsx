@@ -10,7 +10,6 @@ type Card = { session: Session | null; decision: Decision | null; at: number };
 const ACTIVE_MS = 20_000; // "live" on a card means Jev moved recently, not just that a session is open
 
 const SOON = [
-  { title: 'Super Jev Bros', blurb: 'A side-scrolling platformer.', accent: '#ef4444' },
   { title: 'Freedoom', blurb: 'Classic FPS on free assets.', accent: '#84cc16' },
 ];
 
