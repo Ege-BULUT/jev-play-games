@@ -7,8 +7,9 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: PageProps<'/play/[game]'>) {
-  const g = gameById((await params).game);
-  return { title: g ? `${g.title} · Jev Play Games` : 'Jev Play Games' };
+  const id = (await params).game;
+  const g = gameById(id);
+  return { title: g ? `${g.title} · Jev Play Games` : 'Jev Play Games', alternates: { canonical: `/play/${id}` } };
 }
 
 export default async function Page({ params, searchParams }: PageProps<'/play/[game]'>) {
